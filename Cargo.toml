@@ -16,3 +16,4 @@ num = { version = "0.4", default-features = false }
 
 [dev-dependencies]
 byteorder = "1.4"
+rand = "0.8"

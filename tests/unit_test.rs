@@ -1,5 +1,22 @@
 use byteorder::{ByteOrder, LittleEndian};
 use fletcher_simd::{Fletcher128, Fletcher16, Fletcher32, Fletcher64};
+use rand::{
+    distributions::{Distribution, Uniform},
+    Rng,
+};
+
+#[test]
+fn default_zeroes() {
+    let fletcher16 = Fletcher16::new();
+    let fletcher32 = Fletcher32::new();
+    let fletcher64 = Fletcher64::new();
+    let fletcher128 = Fletcher128::new();
+
+    assert_eq!(fletcher16.value(), 0);
+    assert_eq!(fletcher32.value(), 0);
+    assert_eq!(fletcher64.value(), 0);
+    assert_eq!(fletcher128.value(), 0);
+}
 
 #[test]
 fn simple_fletcher16() {
@@ -107,4 +124,29 @@ fn lorem_fletcher128() {
     );
 
     assert_eq!(fletcher.value(), 0xC6B64C7008FC4EC12C654FCFBC31506C);
+}
+
+#[test]
+fn simd_scalar_same() {
+    let mut rng = rand::thread_rng();
+    let size_range = Uniform::from(1..65);
+
+    const NUM_ITERS: usize = 1000;
+    for _ in 0..NUM_ITERS {
+        let mut simd = Fletcher64::new();
+        let mut scalar = Fletcher64::new();
+
+        let size: usize = size_range.sample(&mut rng);
+        let data: Vec<u32> = (0..size).map(|_| rng.gen()).collect();
+
+        simd.update_with_slice(data.as_slice());
+        scalar.update_with_slice(data.as_slice());
+
+        assert_eq!(
+            simd.value(),
+            scalar.value(),
+            "mismatch on checksum from: {:?}",
+            data
+        );
+    }
 }
