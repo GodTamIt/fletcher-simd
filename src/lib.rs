@@ -5,7 +5,7 @@ use core::{
     cmp::PartialEq,
     convert::{From, TryFrom},
     fmt::Debug,
-    ops::{Add, AddAssign},
+    ops::{Add, AddAssign, Index, IndexMut, Mul},
     simd::{LaneCount, Simd, SimdElement, SupportedLaneCount},
 };
 use multiversion::multiversion;
@@ -22,22 +22,6 @@ pub trait FletcherChecksum: Num + Unsigned + Default {
         + Unsigned
         + WrappingAdd
         + WrappingSub;
-}
-
-impl FletcherChecksum for u16 {
-    type BlockType = u8;
-}
-
-impl FletcherChecksum for u32 {
-    type BlockType = u16;
-}
-
-impl FletcherChecksum for u64 {
-    type BlockType = u32;
-}
-
-impl FletcherChecksum for u128 {
-    type BlockType = u64;
 }
 
 /// A Fletcher checksum object that allows for continuous updates to the checksum.
@@ -83,6 +67,10 @@ pub struct Fletcher<T: FletcherChecksum> {
 /// associated types and outside generics.
 macro_rules! impl_fletcher {
     ($result_type:ty, $block_type:ty, $block_size:literal) => {
+        impl FletcherChecksum for $result_type {
+            type BlockType = $block_type;
+        }
+
         impl Fletcher<$result_type> {
             /// Constructs a new `Fletcher<T>` with the default values.
             pub fn new() -> Self {
@@ -142,6 +130,7 @@ macro_rules! impl_fletcher {
                 let mut simd_vec = Simd::<$block_type, NUM_LANES>::default();
                 let mut simd_size = 0;
 
+                // Grab chunks of `NUM_LANES` and feed them into the SIMD calculation.
                 (self.a, self.b) = update_fletcher_simd(
                     self.a,
                     self.b,
@@ -151,13 +140,15 @@ macro_rules! impl_fletcher {
 
                         if simd_size == NUM_LANES {
                             simd_size = 0;
-                            Some(simd_vec.clone())
+                            Some(simd_vec)
                         } else {
                             None
                         }
                     }),
                 );
 
+                // If the number elements are not a multiple of `NUM_LANES`, use scalar fallback to
+                // compute remainder slice.
                 if simd_size > 0 {
                     (self.a, self.b) = update_fletcher_scalar(
                         self.a,
@@ -185,7 +176,7 @@ macro_rules! impl_fletcher {
         }
 
         impl From<Fletcher<$result_type>> for $result_type {
-            fn from(f: Fletcher<$result_type>) -> $result_type {
+            fn from(f: Fletcher<$result_type>) -> Self {
                 f.value()
             }
         }
@@ -217,6 +208,7 @@ trait FletcherSimdVec<T, const LANES: usize>:
     + Copy
     + Clone
     + Default
+    + Mul<Self, Output = Self>
     + Sized
 where
     T: Copy + Clone + Default + SimdElement + WrappingAdd + WrappingSub,
@@ -269,7 +261,9 @@ where
     <BlockType as TryFrom<usize>>::Error: Debug,
     LaneCount<LANES>: SupportedLaneCount,
     Iter: Iterator<Item = SimdVec>,
-    SimdVec: FletcherSimdVec<BlockType, LANES>,
+    SimdVec: FletcherSimdVec<BlockType, LANES>
+        + Index<usize, Output = BlockType>
+        + IndexMut<usize, Output = BlockType>,
 {
     let mut a_accum = SimdVec::default();
     let mut b_accum = SimdVec::default();
@@ -281,15 +275,21 @@ where
 
     a = a.wrapping_add(&a_accum.horizontal_sum());
 
+    // b += (LANES * b_accum)
     let b_prime = BlockType::wrapping_mul(
         &BlockType::try_from(LANES).unwrap(),
         &b_accum.horizontal_sum(),
     );
     b = b.wrapping_add(&b_prime);
-    for (idx, val) in a_accum.as_ref().iter().enumerate().skip(1) {
-        let b_prime = BlockType::wrapping_mul(&BlockType::try_from(idx).unwrap(), val);
-        b = b.wrapping_sub(&b_prime);
-    }
+
+    // b -= (i * a_accum[i]) for i in 0..LANES
+    let increasing_mask = {
+        let mut vec = SimdVec::default();
+        (0..LANES).for_each(|i| vec[i] = BlockType::try_from(i).unwrap());
+        vec
+    };
+    let sub_a = a_accum * increasing_mask;
+    b = b.wrapping_sub(&sub_a.horizontal_sum());
 
     (a, b)
 }

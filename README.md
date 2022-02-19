@@ -6,6 +6,8 @@
 
 A SIMD implementation of the [Fletcher's checksum] algorithm.
 
+**Note:** This implementation uses a modulus of `2^k` where `k` is the checksum block size in bits, as this is fast with wrapping math. Other implementations may use `2^k - 1`.
+
 ## Features
 
   * Uses `std::simd`, which currently requires **nightly**.
