@@ -5,7 +5,7 @@ use core::{
     cmp::PartialEq,
     convert::{From, TryFrom},
     fmt::Debug,
-    ops::{Add, AddAssign, Index, IndexMut, Mul},
+    ops::{Add, AddAssign, IndexMut, Mul},
     simd::{LaneCount, Simd, SimdElement, SupportedLaneCount},
 };
 use multiversion::multiversion;
@@ -63,6 +63,10 @@ pub struct Fletcher<T: FletcherChecksum> {
     b: T::BlockType,
 }
 
+/// Currently, limit vector sizes to 256 bits. In the future, this may bump up to 512 bits for
+/// AVX-512.
+const MAX_VEC_SIZE: usize = 256 / 8;
+
 /// Macro to implement [`Fletcher`] since the SIMD interface does not play well with inherent
 /// associated types and outside generics.
 macro_rules! impl_fletcher {
@@ -91,11 +95,7 @@ macro_rules! impl_fletcher {
                     return;
                 }
 
-                const NUM_LANES: usize = if 256 / $block_size > 64 {
-                    64
-                } else {
-                    256 / $block_size
-                };
+                const NUM_LANES: usize = MAX_VEC_SIZE / $block_size;
 
                 let (simd_slice, remainder_slice) =
                     data.split_at(data.len() - (data.len() % NUM_LANES));
@@ -121,11 +121,7 @@ macro_rules! impl_fletcher {
             where
                 Iter: Iterator<Item = $block_type>,
             {
-                const NUM_LANES: usize = if 256 / $block_size > 64 {
-                    64
-                } else {
-                    256 / $block_size
-                };
+                const NUM_LANES: usize = MAX_VEC_SIZE / $block_size;
 
                 let mut simd_vec = Simd::<$block_type, NUM_LANES>::default();
                 let mut simd_size = 0;
@@ -261,9 +257,7 @@ where
     <BlockType as TryFrom<usize>>::Error: Debug,
     LaneCount<LANES>: SupportedLaneCount,
     Iter: Iterator<Item = SimdVec>,
-    SimdVec: FletcherSimdVec<BlockType, LANES>
-        + Index<usize, Output = BlockType>
-        + IndexMut<usize, Output = BlockType>,
+    SimdVec: FletcherSimdVec<BlockType, LANES> + IndexMut<usize, Output = BlockType>,
 {
     let mut a_accum = SimdVec::default();
     let mut b_accum = SimdVec::default();
