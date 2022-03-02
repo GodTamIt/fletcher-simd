@@ -1,15 +1,23 @@
 #![doc = include_str!("../README.md")]
+#![feature(aarch64_target_feature)]
 #![feature(portable_simd)]
+#![feature(stdsimd)]
 
-use core::{
-    cmp::PartialEq,
-    convert::{From, TryFrom},
-    fmt::Debug,
-    ops::{Add, AddAssign, IndexMut, Mul},
-    simd::{LaneCount, Simd, SimdElement, SupportedLaneCount},
+use {
+    core::{
+        cmp::PartialEq,
+        convert::{From, TryFrom},
+        fmt::Debug,
+        ops::{Add, AddAssign, IndexMut, Mul},
+        simd::{LaneCount, Simd, SimdElement, SupportedLaneCount},
+    },
+    multiversion::multiversion,
+    num::traits::{Num, Unsigned, WrappingAdd, WrappingMul, WrappingSub},
 };
-use multiversion::multiversion;
-use num::traits::{Num, Unsigned, WrappingAdd, WrappingMul, WrappingSub};
+
+#[cfg(feature = "runtime_dispatch")]
+#[allow(unused_imports)]
+use std::arch::{is_aarch64_feature_detected, is_arm_feature_detected};
 
 /// Trait for the type representing a certain sized Fletcher checksum.
 pub trait FletcherChecksum: Num + Unsigned + Default {

@@ -15,6 +15,10 @@ A SIMD implementation of the [Fletcher's checksum] algorithm.
   * Both run-time and compile-time detection available via the [`multiversion`] crate.
   * Scalar fallback.
 
+## Cargo features
+
+There is one cargo feature, `runtime_dispatch`, enabled by default. When enabled, the crate will use CPU feature detection at runtime to dispatch to the appropriate SIMD implementation. Disabling this feature will result in static dispatch only.
+
 ## Example
 
 ```rust
