@@ -1,5 +1,4 @@
 #![doc = include_str!("../README.md")]
-#![feature(aarch64_target_feature)]
 #![feature(portable_simd)]
 #![feature(stdsimd)]
 
@@ -9,7 +8,7 @@ use {
         convert::{From, TryFrom},
         fmt::Debug,
         ops::{Add, AddAssign, IndexMut, Mul},
-        simd::{LaneCount, Simd, SimdElement, SupportedLaneCount},
+        simd::{LaneCount, Simd, SimdElement, SimdUint, SupportedLaneCount},
     },
     multiversion::multiversion,
     num::traits::{Num, Unsigned, WrappingAdd, WrappingMul, WrappingSub},
@@ -214,6 +213,7 @@ trait FletcherSimdVec<T, const LANES: usize>:
     + Default
     + Mul<Self, Output = Self>
     + Sized
+    + SimdUint
 where
     T: Copy + Clone + Default + SimdElement + WrappingAdd + WrappingSub,
     LaneCount<LANES>: SupportedLaneCount,
@@ -229,7 +229,7 @@ macro_rules! impl_simdvec {
         {
             #[inline]
             fn horizontal_sum(self) -> $t {
-                self.horizontal_sum()
+                self.reduce_sum()
             }
         }
     };
